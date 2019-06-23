@@ -57,3 +57,12 @@ type DNSQuery struct {
 	QT QType
 	QC QClass
 }
+
+type DNSRecord struct {
+	DomainName         string
+	QType              uint16
+	QClass             uint16
+	TTL                uint32
+	DataLength uint16
+	Data       []byte
+}

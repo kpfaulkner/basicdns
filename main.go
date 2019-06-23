@@ -50,6 +50,9 @@ type BasicDNS struct {
   requestChannel chan models.RawDNSRequest // requests to go routines will come through the channel.
 
   numResolverGoRoutines int
+
+  // cache... simplistic one for now.
+  cache DNSCacheReaderWriter
 }
 
 // NewBasicDNS Create new instance, initialise pool of goroutines etc.
@@ -60,12 +63,15 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	// channel size of 1000.....  need to figure out what is the best size here.
 	requests := make(chan models.RawDNSRequest, 1000)
 	b.requestChannel = requests
+	cache := DNSCache{}
+	b.cache = &cache
 
 	return &b, nil
 }
 
-// readQueryName reads the domain names from the question section.
-func readQueryName(requestBuffer *bytes.Buffer) (string, error) {
+// readQueryDetails reads the domain names from the question section.
+// also returns QType and QClass
+func readQueryDetails(requestBuffer *bytes.Buffer) (*models.DNSQuery, error) {
 
 	var domainSegments []string
 
@@ -86,12 +92,21 @@ func readQueryName(requestBuffer *bytes.Buffer) (string, error) {
 		_, err = requestBuffer.Read(byteSlice)
 		if err != nil {
 			log.Errorf("Unable to read part of request domain %s\n", err)
-			return "", err
+			return nil, err
 		}
 		domainSegments = append(domainSegments, string(byteSlice))
 	}
 
-	return strings.Join(domainSegments, "."), nil
+	// reads QType and QClass
+	qType := models.QType(binary.BigEndian.Uint16(requestBuffer.Next(2)))
+	qClass := models.QClass(binary.BigEndian.Uint16(requestBuffer.Next(2)))
+
+	req := models.DNSQuery{}
+	req.Domain = strings.Join(domainSegments, ".")
+	req.QT = qType
+	req.QC = qClass
+
+	return &req, nil
 }
 
 // readRequest converts the bytearray to the DNSRequest format.
@@ -106,22 +121,43 @@ func readRequest( requestBuffer *bytes.Buffer) (*models.DNSRequest, error) {
 		return nil, err
 	}
 
+	request := models.DNSRequest{}
+
+	log.Infof("number of queries %d\n", header.QDCount)
+
 	// loop through and read all record requests.
 	for i:=uint16(0); i< header.QDCount; i++ {
-		name,err  := readQueryName(requestBuffer)
+		req,err  := readQueryDetails(requestBuffer)
 		if err != nil {
 			log.Errorf("error while reading domain %s\n", err)
 		}
-		log.Infof("got name %s\n", name)
+
+		log.Infof("have query for %s\n", req.Domain)
+		request.QuerySlice = append( request.QuerySlice, *req)
 	}
 
-	return nil, nil
+	return &request, nil
 }
 
+// sendNotImplemented will send RCODE 4 (not implemented)
+func sendNotImplemented(conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+}
+
+func (b *BasicDNS) processARecordRequest(query models.DNSQuery, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+}
+
+func (b *BasicDNS) processCNameRequest(query models.DNSQuery, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+}
 
 // processDNSRequest is where the work happens.
 // Reads the incoming request channel, decodes the request, processes, then returns reponse.
-func processDNSRequest(conn *net.UDPConn, requestChannel chan models.RawDNSRequest) {
+//
+// First version will only handle a SINGLE question in the DNS request.
+// Unsure how we should handle multiple. (or how to test it). Baby steps..
+func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan models.RawDNSRequest) {
 
 	for {
 		request, ok := <-requestChannel
@@ -141,13 +177,28 @@ func processDNSRequest(conn *net.UDPConn, requestChannel chan models.RawDNSReque
 
 		log.Infof("dnsRequest is %v\n", dnsRequest)
 
+		// only process first request.
+		switch dnsRequest.QuerySlice[0].QT {
+
+		  case models.ARecord : {
+		  	b.processARecordRequest( dnsRequest.QuerySlice[0], conn, request.ClientAddr)
+		  }
+		  case models.CName : {
+			  b.processCNameRequest( dnsRequest.QuerySlice[0], conn, request.ClientAddr)
+		  }
+
+		  default:
+			  log.Errorf("Not dealing with anything other than A and CNAME lookups so far!\n")
+			  sendNotImplemented( conn, request.ClientAddr)
+		}
+
 	}
 }
 
 // createHandlerPool will create a pool of go routines that handle the incoming requests.
 func (b BasicDNS) createHandlerPool( conn *net.UDPConn ) {
 	for i:=0;i< b.numResolverGoRoutines ;i++ {
-    go processDNSRequest( conn, b.requestChannel )
+    go b.processDNSRequest( conn, b.requestChannel )
 	}
 }
 
