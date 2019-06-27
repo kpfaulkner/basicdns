@@ -24,6 +24,7 @@ const (
   CH QClass = 3
   HS QClass = 4
 
+	QRResponseFlag uint16 = 1 << 15
 )
 
 
@@ -38,7 +39,7 @@ type RawDNSRequest struct {
 // DNSRequest is DNS Request (duh).
 // Within a single request there can actually be multiple domains to lookup.
 type DNSRequest struct {
-	QuerySlice []DNSQuery
+	QuerySlice []DNSQuestion
 }
 
 // DNSHeader... first 12 bytes of the UDP packet.
@@ -52,17 +53,25 @@ type DNSHeader struct {
 	ADCount    uint16
 }
 
-type DNSQuery struct {
+type DNSQuestion struct {
 	Domain string
 	QT QType
 	QC QClass
 }
 
-type DNSRecord struct {
+// DNSResourceRecord used for answers, authority records and additional records
+type DNSResourceRecord struct {
 	DomainName         string
 	QType              uint16
 	QClass             uint16
 	TTL                uint32
-	DataLength uint16
-	Data       []byte
+	DataLength         uint16
+	Data               []byte
 }
+
+
+
+
+
+
+
