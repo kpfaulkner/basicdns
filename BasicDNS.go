@@ -68,8 +68,8 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	cache := DNSCache{}
 	b.cache = &cache
 
-	ud :=  NewUpstreamDNS("1.1.1.1")
-	b.upstreamDNS = ud
+	ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
+	b.upstreamDNS = *ud
 
 	return &b, nil
 }
@@ -149,8 +149,9 @@ func sendNotImplemented(conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 }
 
-// sendDNSRecordResponse sends the DNSRecord to the clientAddr.
-func sendDNSRecordResponse( record DNSPacket,conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
+// sendDNSPacketesponse sends the DNSPacket to the clientAddr.
+func sendDNSPacketResponse( record DNSPacket,conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
+
 
 	return nil
 }
@@ -171,7 +172,7 @@ func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn,
 	if !recordExists{
 
 		// if allowed to check upstream, do it.
-		if dnsPacket.header.MiscFlags & RDFlag != 0 {
+		if dnsPacket.header.MiscFlags & models.RD != 0 {
 			// query upstream DNS server, record into cache.
 			// perform ARecord lookup.
 			// store in cache
@@ -192,7 +193,7 @@ func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn,
 		newDNSPacket = record.DNSRec
 	}
 
-	sendDNSRecordResponse( newDNSPacket, conn, clientAddr)
+	sendDNSPacketResponse( newDNSPacket, conn, clientAddr)
 }
 
 func (b *BasicDNS) processCNameRequest(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {

@@ -46,6 +46,12 @@ func connectUpStream( upstreamDNS string, udpAddr *net.UDPAddr ) (*net.UDPConn, 
 // GetARecord returns
 func (u UpstreamDNS) GetARecord(domainName string) (*DNSPacket, error) {
 
+	dnsPacket, err := GenerateARecordRequest( domainName, true)
+	if err != nil {
+		log.Errorf("unable to get ARecord from upstream provider %s\n", err)
+		return nil, err
+	}
+
 	SendDNSRecord( dnsPacket, u.conn, u.udpAddr)
 
 	return nil, nil

@@ -397,12 +397,10 @@ func GenerateDNSHeader( domainName string, isResponse bool, opCode models.OpCode
 func GenerateARecordRequest( domainName string, recursive bool ) (DNSPacket, error ) {
 
 	dnsPacket := NewDNSPacket()
+	dnsPacket.header = GenerateDNSHeader( domainName, false, models.OpCodeStandard, false, recursive)
 	dnsPacket.question = GenerateDNSQuestion(domainName, models.ARecord, models.QCIN )
-  dnsPacket.header = GenerateDNSHeader( domainName, false, models.OpCodeStandard, false, true)
-  
 
-
-
+	return dnsPacket, nil
 }
 
 
