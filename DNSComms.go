@@ -20,11 +20,15 @@ func SendDNSRecord(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAd
 		return err
 	}
 
-	_, err = conn.WriteToUDP(buffer.Bytes(), clientAddr)
+
+	//_, err = conn.WriteTo(buffer.Bytes(), clientAddr)
+	_, err = conn.Write(buffer.Bytes())
 	if err != nil {
 		log.Errorf("Unable to send packet %s\n", err)
 		return err
 	}
+
+	// now listen for response.
 
 	return nil
 }
@@ -36,11 +40,24 @@ func ReadUDPSResponse( conn *net.UDPConn, clientAddr *net.UDPAddr ) (*DNSPacket,
 	// nasty magic...
 	conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(30)))
 
+	nRead, addr, err := conn.ReadFrom(byteArray)
+	if err != nil {
+		log.Errorf("unable to read UDP response %s\n", err)
+		return nil, err
+	}
+
+	log.Debugf("nread %d\n", nRead)
+	log.Debugf("addr %s\n", addr)
+
+
+	/*
 	_, err := conn.Read(byteArray)
 	if err != nil {
 		log.Errorf("unable to read UDP response %s\n", err)
 		return nil, err
 	}
+	*/
+
 
 	var buffer = new(bytes.Buffer)
 	buffer.Write(byteArray)

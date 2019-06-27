@@ -4,7 +4,7 @@ import "net"
 
 type QType uint16
 type QClass uint16
-type OpCode byte
+type OpCode uint16
 const (
 
 	// QType

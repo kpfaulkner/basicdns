@@ -178,12 +178,13 @@ func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn,
 			// store in cache
 			// return to sender....    address unknown.
 			//record, err := b.upstreamDNS.GetARecord( dnsPacket)
-			newDNSPacket = NewDNSPacket()  // get via upstream
+			newDNSPacket, err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
+
 			if err != nil {
 				// unable to get ARecord..... kaboom?
 				// TODO(kpfaulkner)
 			}
-			b.cache.Set( models.ARecord, dnsPacket.question.Domain, newDNSPacket)
+			b.cache.Set( models.ARecord, dnsPacket.question.Domain, *newDNSPacket)
 		} else {
 			// no recursion wanted.
 			// return with no answer.

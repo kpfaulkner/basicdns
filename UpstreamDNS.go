@@ -35,9 +35,23 @@ func NewUpstreamDNS( nameServer string, port int) (*UpstreamDNS, error) {
 // Returning Conn interface as opposed to UDPConn. Should be ok. :)
 func connectUpStream( upstreamDNS string, udpAddr *net.UDPAddr ) (*net.UDPConn, error){
 	//Connect udp
+
+	/*
 	conn, err := net.DialUDP("udp", nil, udpAddr )
 	if err != nil {
 		return nil, err
+	}*/
+
+	var ip = make(net.IP,4)
+	// 203.40.11.170
+	ip[0] = 203
+	ip[1] = 40
+	ip[2] = 11
+	ip[3] = 170
+
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{ Port: 10000})
+	if err != nil {
+		log.Fatal("Listen:", err)
 	}
 
   return conn, nil
@@ -52,7 +66,21 @@ func (u UpstreamDNS) GetARecord(domainName string) (*DNSPacket, error) {
 		return nil, err
 	}
 
-	SendDNSRecord( dnsPacket, u.conn, u.udpAddr)
+	udpAddr,_ := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", "127.0.0.1", 1053))
+	conn, err := net.DialUDP("udp", nil, udpAddr )
+	if err != nil {
+		return nil, err
+	}
+
+	SendDNSRecord( dnsPacket, conn, udpAddr)
+
+	resp, err := ReadUDPSResponse(conn, udpAddr )
+	if err != nil {
+		log.Errorf("unable to get response upstream provider %s\n", err)
+		return nil, err
+	}
+
+	log.Debugf("resp is %v\n", resp)
 
 	return nil, nil
 }
