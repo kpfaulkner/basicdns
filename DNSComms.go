@@ -1,30 +1,30 @@
 package main
 
 import (
-	"basicdns/models"
 	"bytes"
-	"encoding/binary"
+	"github.com/labstack/gommon/log"
 	"net"
 )
 
-// SendDNSRecord send the DNSRecord to the client address. Given DNSRecord is used for the request AND the
+// SendDNSRecord send the DNSRecord to the client address. Given DNSPacket is used for the request AND the
 // response, this function can be used when replying to whoever is called BasicDNS but could also be used for
 // when querying upstream DNS servers when we dont know the answer.
-func SendDNSRecord(transactionID uint16, miscFlags uint16,   record models.DNSRecord, conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
+func SendDNSRecord(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
 
-	var responseBuffer = new(bytes.Buffer)
-	var responseHeader models.DNSHeader
+	var buffer = new(bytes.Buffer)
 
-	responseHeader = models.DNSHeader{
-		ID : transactionID,
-		MiscFlags : miscFlags,
-		NumQuestions:   queryHeader.NumQuestions,
-		NumAnswers:     uint16(len(answerResourceRecords)),
-		NumAuthorities: uint16(len(authorityResourceRecords)),
-		NumAdditionals: uint16(len(additionalResourceRecords)),
+	err := WriteDNSPacketToBuffer(dnsPacket, buffer)
+	if err != nil {
+		log.Errorf("Unable to generate packet to send %s\n", err)
+		return err
 	}
 
-	err = binary.Write(responseBuffer, binary.BigEndian, &responseHeader)
+	_, err = conn.WriteToUDP(buffer.Bytes(), clientAddr)
+	if err != nil {
+		log.Errorf("Unable to send packet %s\n", err)
+		return err
+	}
 
 	return nil
 }
+

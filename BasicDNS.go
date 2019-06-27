@@ -150,55 +150,52 @@ func sendNotImplemented(conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 }
 
 // sendDNSRecordResponse sends the DNSRecord to the clientAddr.
-func sendDNSRecordResponse( record models.DNSRecord,conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
+func sendDNSRecordResponse( record DNSPacket,conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
 
 	return nil
 }
 
-func (b *BasicDNS) processARecordRequest(query models.DNSQuestion, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+	var newDNSPacket DNSPacket
 
 	// check cache
-
-	record, recordExists, err := b.cache.Get( models.ARecord, query.Domain)
+	record, recordExists, err := b.cache.Get( models.ARecord, dnsPacket.question.Domain)
 	if err != nil {
     // cannot work... return not implemented for moment!
     sendNotImplemented( conn, clientAddr)
     return
 	}
 
-	if recordExists {
-		// return entry.
-		log.Infof("record to send %v\n", record)
-		sendDNSRecordResponse( record.DNSRec, conn, clientAddr)
 
-	} else {
-		// query upstream DNS server, record into cache.
-    // perform ARecord lookup.
-    // store in cache
-    // return to sender....    address unknown.
-    record, err := b.upstreamDNS.GetARecord(query.Domain)
-    if err != nil {
-    	// unable to get ARecord..... kaboom?
-    	// TODO(kpfaulkner)
+	if !recordExists{
+
+		// if allowed to check upstream, do it.
+		if dnsPacket.header.MiscFlags & RDFlag != 0 {
+			// query upstream DNS server, record into cache.
+			// perform ARecord lookup.
+			// store in cache
+			// return to sender....    address unknown.
+			//record, err := b.upstreamDNS.GetARecord( dnsPacket)
+			newDNSPacket = NewDNSPacket()  // get via upstream
+			if err != nil {
+				// unable to get ARecord..... kaboom?
+				// TODO(kpfaulkner)
+			}
+			b.cache.Set( models.ARecord, dnsPacket.question.Domain, newDNSPacket)
+		} else {
+			// no recursion wanted.
+			// return with no answer.
+
     }
-
-		//QType              uint16
-		//QClass             uint16
-		//TTL                uint32
-		//DataLength uint16
-		//Data       []byte
-
-
-    dnsRecord := models.DNSRecord{ query.Domain}
-    b.cache.Set( models.ARecord, query.Domain, dnsRecord)
-
-
-		sendDNSRecordResponse( record.DNSRec, conn, clientAddr)
+	} else {
+		newDNSPacket = record.DNSRec
 	}
 
+	sendDNSRecordResponse( newDNSPacket, conn, clientAddr)
 }
 
-func (b *BasicDNS) processCNameRequest(query models.DNSQuestion, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+func (b *BasicDNS) processCNameRequest(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 }
 
@@ -220,24 +217,25 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 
 		var requestBuffer = bytes.NewBuffer(request.RawBytes)
 
-		dnsRequest, err := readRequest( requestBuffer)
+		dnsPacket,err  := ReadDNSPacketFromBuffer( requestBuffer)
 		if err != nil {
-		  // unable to process this, so will return a "not implemented" to the client.
-		  // probably should throw something else though.
-		  sendNotImplemented( conn, request.ClientAddr)
+			log.Errorf("unable to process request... BOOOOOM  %s\n", err)
+			sendNotImplemented( conn, request.ClientAddr)
 			continue
 		}
 
-		log.Infof("dnsRequest is %v\n", dnsRequest)
+		log.Infof("packet is %v\n", dnsPacket)
+
+
 
 		// only process first request until I figure out how to handle multiple questions from request packet.
-		switch dnsRequest.QuerySlice[0].QT {
+		switch dnsPacket.question.QT {
 
 		  case models.ARecord : {
-		  	b.processARecordRequest( dnsRequest.QuerySlice[0], conn, request.ClientAddr)
+		  	b.processARecordRequest(  *dnsPacket, conn, request.ClientAddr)
 		  }
 		  case models.CName : {
-			  b.processCNameRequest( dnsRequest.QuerySlice[0], conn, request.ClientAddr)
+			  b.processCNameRequest( *dnsPacket, conn, request.ClientAddr)
 		  }
 
 		  default:

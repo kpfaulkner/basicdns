@@ -14,14 +14,14 @@ import (
 )
 
 type CacheEntry struct {
-	DNSRec models.DNSRecord
+	DNSRec DNSPacket
 	ExpiryTimeStamp time.Time   // used to validate/expire TTL.
 }
 
 
 // DNSCacheReaderWriter is the interface for any caches that will store DNSRecords
 type DNSCacheReaderWriter interface {
-  Set( qType models.QType, domainName string, record models.DNSRecord ) error
+  Set( qType models.QType, domainName string, record DNSPacket ) error
 
   Get( qType models.QType, domainName string) (*CacheEntry, bool, error)
 }
@@ -64,14 +64,14 @@ func (d *DNSCache) getRecordMap( qType models.QType ) (map[string]CacheEntry, er
 }
 
 // NOT THREAD SAFE YET
-func (d *DNSCache) Set( qType models.QType, domainName string, record models.DNSRecord ) error {
+func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket ) error {
   m, err := d.getRecordMap( qType)
   if err != nil {
   	log.Errorf("Cache set unable to get appropriate cache map %s\n", err)
   	return err
   }
 
-  expireTime := time.Now().UTC().Add( time.Duration(record.TTL) * time.Second)
+  expireTime := time.Now().UTC().Add( time.Duration(record.answers[0].TTL) * time.Second)
   cacheEntry := CacheEntry{ DNSRec: record, ExpiryTimeStamp: expireTime}
 	m[domainName ] = cacheEntry
 

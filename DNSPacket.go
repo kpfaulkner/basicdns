@@ -6,9 +6,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/labstack/gommon/log"
+	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 )
+
 
 // DNSPacket is the entire DNS Packet used for requests and responses.
 type DNSPacket struct {
@@ -132,7 +135,7 @@ func ReadDNSQuestionFromBuffer( requestBuffer *bytes.Buffer, noQuestions uint16 
 	req.QT = qType
 	req.QC = qClass
 
-	return &question, nil
+	return &req, nil
 }
 
 // ReadDNSResourceRecordFromBuffer reads the DNS resource records from the requestBuffer. This can be used for answers, authority or additional RR
@@ -339,7 +342,7 @@ func convertIPToBytes( ip string ) [4]byte {
 // TODO(kpfaulkner) add error checking.
 func convertBytesToIP(bytes [4]byte) string {
 
-  var sp [4]string
+  var sp = make([]string, 4)
 	for  i, b := range bytes {
       sp[i] = fmt.Sprintf("%d", b)
 	}
@@ -347,6 +350,60 @@ func convertBytesToIP(bytes [4]byte) string {
 	return strings.Join(sp, ".")
 }
 
+func GenerateDNSQuestion( domainName string, qt models.QType, qc models.QClass ) (models.DNSQuestion) {
+  qs := models.DNSQuestion{}
+  qs.Domain = domainName
+  qs.QT = qt
+  qs.QC = qc
+  return qs
+}
+
+func GenerateFlags(  isResponse bool, opCode models.OpCode, isTruncated bool, isRecursive bool ) uint16 {
+  flags := uint16(0)
+
+  if isResponse {
+  	flags |= models.QRResponseFlag
+  }
+
+  flags |= uint16(opCode)
+
+  if isTruncated {
+  	flags |= models.TC
+  }
+
+  if isRecursive {
+  	flags |= models.RD
+  }
+
+	return flags
+}
+
+func GenerateDNSHeader( domainName string, isResponse bool, opCode models.OpCode, isTruncated bool, isRecursive bool) models.DNSHeader {
+
+	h := models.DNSHeader{}
+
+	rand.Seed(time.Now().Unix())
+	n := rand.Intn(32767)
+	h.ID = uint16(n)
+  h.MiscFlags = GenerateFlags(isResponse, opCode, isTruncated, isRecursive)
+  h.QDCount = 1  // assumption we'll only deal with 1 query at a time.
+  h.ANCount = 0
+  h.NSCount = 0
+  h.ADCount = 0
+
+	return h
+}
+
+func GenerateARecordRequest( domainName string, recursive bool ) (DNSPacket, error ) {
+
+	dnsPacket := NewDNSPacket()
+	dnsPacket.question = GenerateDNSQuestion(domainName, models.ARecord, models.QCIN )
+  dnsPacket.header = GenerateDNSHeader( domainName, false, models.OpCodeStandard, false, true)
+  
+
+
+
+}
 
 
 

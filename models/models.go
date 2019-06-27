@@ -4,7 +4,7 @@ import "net"
 
 type QType uint16
 type QClass uint16
-
+type OpCode byte
 const (
 
 	// QType
@@ -20,11 +20,22 @@ const (
   TXT QType = 16
 
   // QClass
-  IN QClass = 1
-  CH QClass = 3
-  HS QClass = 4
+  QCIN QClass = 1
+	QCCH QClass = 3
+	QCHS QClass = 4
+
+
+	OpCodeStandard OpCode = 0
+	OpCodeInverse OpCode = 1 << 12
+	ServerStatus OpCode = 1 << 13
+
+	AA           uint16 = 1 << 10
+	TC           uint16 = 1 << 9
+	RD           uint16 = 1 << 8
+	RA           uint16 = 1 << 7
 
 	QRResponseFlag uint16 = 1 << 15
+
 )
 
 
