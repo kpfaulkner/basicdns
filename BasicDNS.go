@@ -53,6 +53,11 @@ type BasicDNS struct {
   cache DNSCacheReaderWriter
 
   upstreamDNS UpstreamDNS
+
+  // LUT for requests that had to be looked up from upstream providers.
+  // The key is the ID of the original request. The value is the address of the
+  // original client requesting this.
+  upstreamLUT map[uint16]net.UDPAddr
 }
 
 // NewBasicDNS Create new instance, initialise pool of goroutines etc.
@@ -67,9 +72,12 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	b.cache = &cache
 
 	// TODO(kpfaulkner) remove magic cloudflare.
-	ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
+	///ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
+	ud,_ :=  NewUpstreamDNS("127.0.0.1", 1053)
 	b.upstreamDNS = *ud
 
+	// LUT for when we need to look upstream.
+	b.upstreamLUT = make(map[uint16]net.UDPAddr, 10)
 	return &b, nil
 }
 
@@ -200,6 +208,55 @@ func (b *BasicDNS) processCNameRequest(dnsPacket DNSPacket, conn *net.UDPConn, c
 
 }
 
+// ProcessDNSResponse means an upstream request has been sent and we're now getting the response.
+func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+	// store in cache of awesomeness
+	b.cache.Set( dnsPacket.answers[0].QType, dnsPacket.answers[0].DomainName, dnsPacket )
+
+	// check who wanted it in the first place and send it to them.
+	originalClientAddr := b.upstreamLUT[ dnsPacket.header.ID]
+	SendDNSRecord( dnsPacket, conn, &originalClientAddr)
+	delete(b.upstreamLUT, dnsPacket.header.ID )
+
+}
+
+// sendUpstreamRequest to cloudflare/google/whereever we configure.
+func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+	err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
+
+	if err != nil {
+		// unable to get ARecord..... kaboom?
+		// TODO(kpfaulkner)
+	}
+}
+
+
+func (b *BasicDNS) ProcessDNSQuery(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+
+	// check if we have answer already cached.
+	record, recordExists, err := b.cache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
+  if err != nil {
+  	log.Errorf("Unable to process DNS Query %s\n", err)
+  	// TODO(kpfaulkner) return something to the user... unsure what though.
+  	return
+  }
+
+	if recordExists {
+		// return packet to the user.
+		log.Infof("have record %v\n", record)
+		SendDNSRecord( record.DNSRec, conn, clientAddr)
+	} else {
+
+		// store client ID so we can respond to it later once we have the DNS record!
+		b.upstreamLUT[ dnsPacket.header.ID] = *clientAddr
+
+		// record doesn't exist...  need to query upstream.
+		b.sendUpstreamRequest(dnsPacket, conn, clientAddr)
+	}
+}
+
+
 // processDNSRequest is where the work happens.
 // Reads the incoming request channel, decodes the request, processes, then returns reponse.
 //
@@ -211,13 +268,11 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 		request, ok := <-requestChannel
 		if !ok {
 			b.wg.Done()
-
 			// closed.....  time to leave!!
 			return
 		}
 
 		var requestBuffer = bytes.NewBuffer(request.RawBytes)
-
 		dnsPacket,err  := ReadDNSPacketFromBuffer( requestBuffer)
 		if err != nil {
 			log.Errorf("unable to process request... BOOOOOM  %s\n", err)
@@ -225,23 +280,13 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 			continue
 		}
 
-		log.Infof("packet is %v\n", dnsPacket)
+		isResponse := (dnsPacket.header.MiscFlags & models.QRResponseFlag != 0)
 
-		// only process first request until I figure out how to handle multiple questions from request packet.
-		switch dnsPacket.question.QT {
-
-		  case models.ARecord : {
-		  	b.processARecordRequest(  *dnsPacket, conn, request.ClientAddr)
-		  }
-		  case models.CName : {
-			  b.processCNameRequest( *dnsPacket, conn, request.ClientAddr)
-		  }
-
-		  default:
-			  log.Errorf("Not dealing with anything other than A and CNAME lookups so far!\n")
-			  sendNotImplemented( conn, request.ClientAddr)
+		if isResponse {
+			b.ProcessDNSResponse(*dnsPacket, conn, request.ClientAddr)
+		} else {
+			b.ProcessDNSQuery(*dnsPacket, conn, request.ClientAddr)
 		}
-
 	}
 }
 

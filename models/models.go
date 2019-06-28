@@ -73,8 +73,8 @@ type DNSQuestion struct {
 // DNSResourceRecord used for answers, authority records and additional records
 type DNSResourceRecord struct {
 	DomainName         string
-	QType              uint16
-	QClass             uint16
+	QType              QType
+	QClass             QClass
 	TTL                uint32
 	DataLength         uint16
 	Data               []byte

@@ -60,6 +60,7 @@ func (u UpstreamDNS) GetARecord(domainName string) error {
 	}
 
 	resolver := net.UDPAddr{IP: net.IP{1, 1, 1, 1}, Port: 53}
+	//resolver := net.UDPAddr{IP: net.IP{127,0,0,1}, Port: 1053}
 	SendDNSRecord(dnsPacket, u.Conn, &resolver)
 
 	return nil

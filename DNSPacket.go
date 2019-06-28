@@ -159,8 +159,8 @@ func ReadDNSResourceRecordFromBuffer( requestBuffer *bytes.Buffer, noResourceRec
 
 		record := models.DNSResourceRecord{}
 		record.DomainName = name
-		record.QType = rrType
-		record.QClass = rrClass
+		record.QType = models.QType(rrType)
+		record.QClass = models.QClass(rrClass)
 		record.TTL = rrTTL
 		record.DataLength = rrRDLLength
 		record.Data = requestBuffer.Next( int(rrRDLLength))
