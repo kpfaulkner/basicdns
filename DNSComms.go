@@ -21,8 +21,8 @@ func SendDNSRecord(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAd
 	}
 
 
-	//_, err = conn.WriteTo(buffer.Bytes(), clientAddr)
-	_, err = conn.Write(buffer.Bytes())
+	_, err = conn.WriteTo(buffer.Bytes(), clientAddr)
+	//_, err = conn.Write(buffer.Bytes())
 	if err != nil {
 		log.Errorf("Unable to send packet %s\n", err)
 		return err

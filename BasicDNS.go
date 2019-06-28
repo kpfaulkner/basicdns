@@ -24,12 +24,10 @@ limitations under the License.
 
 */
 
-
 import (
 	"basicdns/models"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	log "github.com/golang/glog"
 	"net"
 	"strings"
@@ -68,6 +66,7 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	cache := DNSCache{}
 	b.cache = &cache
 
+	// TODO(kpfaulkner) remove magic cloudflare.
 	ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
 	b.upstreamDNS = *ud
 
@@ -178,13 +177,13 @@ func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn,
 			// store in cache
 			// return to sender....    address unknown.
 			//record, err := b.upstreamDNS.GetARecord( dnsPacket)
-			newDNSPacket, err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
+			err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
 
 			if err != nil {
 				// unable to get ARecord..... kaboom?
 				// TODO(kpfaulkner)
 			}
-			b.cache.Set( models.ARecord, dnsPacket.question.Domain, *newDNSPacket)
+
 		} else {
 			// no recursion wanted.
 			// return with no answer.
@@ -228,8 +227,6 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 
 		log.Infof("packet is %v\n", dnsPacket)
 
-
-
 		// only process first request until I figure out how to handle multiple questions from request packet.
 		switch dnsPacket.question.QT {
 
@@ -259,16 +256,13 @@ func (b BasicDNS) createHandlerPool( conn *net.UDPConn ) {
 // accept connections and passes off to go routines for processing.
 func (b BasicDNS) RunServer() {
 
-	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", DNSPort))
-	if err != nil {
-		log.Fatalf("Unable to resolve UDP address %s\n", err)
-	}
-
-	conn, err := net.ListenUDP("udp", serverAddr)
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 53})
 	if err != nil {
 		log.Fatalf("Unable to listen %s\n", err.Error())
 	}
 
+	// upstream also use this!
+	b.upstreamDNS.Conn = conn
 	defer conn.Close()
 
 	// About to add numResolverGoRoutines added.
@@ -282,6 +276,7 @@ func (b BasicDNS) RunServer() {
 	for {
 		_, clientAddr, err := conn.ReadFromUDP(requestBuffer)
 
+		log.Infof("got request on UDP!!\n")
 		if err != nil {
 			log.Errorf("Unable to read request bytes %s\n", err)
 			// failed, so need to figure out what to return? For now....  afraid we'll just drop it.

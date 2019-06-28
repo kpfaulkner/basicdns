@@ -216,10 +216,11 @@ func writeDNSHeader( dnsPacket DNSPacket, responseBuffer *bytes.Buffer) error {
 	// assuming QDCount are correct
 	// need to figure out what these do.
 
-	header.MiscFlags = models.QRResponseFlag   // QR == 1, indicating response.
+	//header.MiscFlags = models.QRResponseFlag   // QR == 1, indicating response.
 	header.ANCount = uint16( len( dnsPacket.answers))
 	header.NSCount = uint16( len( dnsPacket.authority))
 	header.ADCount = uint16( len( dnsPacket.additional))
+  header.QDCount = 1
 
 	err := binary.Write(responseBuffer, binary.BigEndian, &header)
 
