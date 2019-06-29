@@ -68,7 +68,7 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	// channel size of 1000.....  need to figure out what is the best size here.
 	requests := make(chan models.RawDNSRequest, 1000)
 	b.requestChannel = requests
-	cache := DNSCache{}
+	cache,_ := NewDNSCache()
 	b.cache = &cache
 
 	// TODO(kpfaulkner) remove magic cloudflare.
@@ -185,7 +185,7 @@ func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn,
 			// store in cache
 			// return to sender....    address unknown.
 			//record, err := b.upstreamDNS.GetARecord( dnsPacket)
-			err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
+			err := b.upstreamDNS.GetARecordWithID(dnsPacket.header.ID,dnsPacket.question.Domain)
 
 			if err != nil {
 				// unable to get ARecord..... kaboom?
@@ -223,7 +223,7 @@ func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, cl
 
 // sendUpstreamRequest to cloudflare/google/whereever we configure.
 func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
-	err := b.upstreamDNS.GetARecord(dnsPacket.question.Domain)
+	err := b.upstreamDNS.GetARecordWithID(dnsPacket.header.ID, dnsPacket.question.Domain)
 
 	if err != nil {
 		// unable to get ARecord..... kaboom?

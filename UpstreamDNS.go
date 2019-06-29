@@ -51,16 +51,16 @@ func connectUpStream( upstreamDNS string, udpAddr *net.UDPAddr ) (*net.UDPConn, 
 
 // GetARecord requests ARecord from upstream DNS server.
 // no data returned here...
-func (u UpstreamDNS) GetARecord(domainName string) error {
+func (u UpstreamDNS) GetARecordWithID(id uint16, domainName string) error {
 
-	dnsPacket, err := GenerateARecordRequest( domainName, true)
+	dnsPacket, err := GenerateARecordRequest( id, domainName, true)
 	if err != nil {
 		log.Errorf("unable to get ARecord from upstream provider %s\n", err)
 		return err
 	}
 
 	resolver := net.UDPAddr{IP: net.IP{1, 1, 1, 1}, Port: 53}
-	//resolver := net.UDPAddr{IP: net.IP{127,0,0,1}, Port: 1053}
+
 	SendDNSRecord(dnsPacket, u.Conn, &resolver)
 
 	return nil

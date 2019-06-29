@@ -6,10 +6,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/labstack/gommon/log"
-	"math/rand"
+
 	"strconv"
 	"strings"
-	"time"
+
 )
 
 
@@ -33,6 +33,12 @@ func NewDNSPacket() DNSPacket {
 // All sections of a DNS request should be populated.
 func ReadDNSPacketFromBuffer(requestBuffer *bytes.Buffer ) (*DNSPacket, error) {
 
+	// this is so stupidly lazy but cant figure out a nice way so
+	// we can get offset from beginning. Given we're just shuffling 512 bytes around it shouldn't be
+	// that impactful, but is definitely a hack. Maybe need to change requestBuffer to simply be a slice of bytes
+	// instead?
+	originalBytes := requestBuffer.Bytes()
+
   header,err  := ReadDNSHeaderFromBuffer(requestBuffer)
   if err != nil {
   	log.Errorf("unable to read DNS header %s\n", err)
@@ -45,19 +51,19 @@ func ReadDNSPacketFromBuffer(requestBuffer *bytes.Buffer ) (*DNSPacket, error) {
 		return nil, err
 	}
 
-	answers, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ANCount)
+	answers, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ANCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS answers %s\n", err)
 		return nil, err
 	}
 
-	authority, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.NSCount)
+	authority, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.NSCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS nameserver authority %s\n", err)
 		return nil, err
 	}
 
-	additional, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ADCount)
+	additional, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ADCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS additional %s\n", err)
 		return nil, err
@@ -86,7 +92,9 @@ func ReadDNSHeaderFromBuffer( requestBuffer *bytes.Buffer ) (*models.DNSHeader, 
 	return &header, nil
 }
 
-func readDomainName( requestBuffer *bytes.Buffer) (string, error) {
+// readNonCompressedDomainName just read "regular" domain name from buffer.
+// split by segment size, bytes of segment, etc etc... until we hit 0 indicating all done.
+func readNonCompressedDomainName( requestBuffer *bytes.Buffer) (string, error) {
 	var domainSegments []string
 	completed := false
 	for completed == false {
@@ -110,7 +118,35 @@ func readDomainName( requestBuffer *bytes.Buffer) (string, error) {
 		domainSegments = append(domainSegments, string(byteSlice))
 	}
 	return strings.Join(domainSegments, "."), nil
+}
 
+// readDomainName reads the domain name from the buffer. There are 2 formats that this can take.
+// one is the first 2 bits are 11 which means  we read the remaining 14 bits for an address which is an
+// offset from the beginning of the packet/buffer.
+// If the first 2 bits are NOT 11 then it will just be the first byte is the number of bytes in that segment of the name
+// followed by the bytes of the segment, repeat until we just read a 0 byte. Must reword this...
+// hack is to have requestBuffer as our main point of reading, but also passing in original message byte slice
+// just so we can get references when we get compressed domain name.
+func readDomainName( requestBuffer *bytes.Buffer, packetBytes []byte ) (string, error) {
+
+	// checking if compressed or not.
+	byteArray := requestBuffer.Bytes()
+	if byteArray[0] & 192 == 192 {
+		// compressed.
+		//firstTwoBytes := binary.BigEndian.Uint16(byteArray[:2])
+
+		// remove first 2 bits
+		//nameOffset := firstTwoBytes & uint16(49152)
+    nameOffset := byteArray[1]
+
+    // tell main requestBuffer to forward on 2 bytes.
+    _ = requestBuffer.Next(2)
+		bufferForName := bytes.NewBuffer(packetBytes[nameOffset:])
+		return readNonCompressedDomainName( bufferForName)
+
+	} else {
+		return readNonCompressedDomainName(requestBuffer)
+	}
 }
 
 // ReadDNSQuestionFromBuffer reads the question from the requestBuffer
@@ -124,7 +160,7 @@ func ReadDNSQuestionFromBuffer( requestBuffer *bytes.Buffer, noQuestions uint16 
 		return &question, nil
 	}
 
-	domainName, _ := readDomainName(requestBuffer)
+	domainName, _ := readNonCompressedDomainName(requestBuffer)
 
 	// reads QType and QClass
 	qType := models.QType(binary.BigEndian.Uint16(requestBuffer.Next(2)))
@@ -139,13 +175,13 @@ func ReadDNSQuestionFromBuffer( requestBuffer *bytes.Buffer, noQuestions uint16 
 }
 
 // ReadDNSResourceRecordFromBuffer reads the DNS resource records from the requestBuffer. This can be used for answers, authority or additional RR
-func ReadDNSResourceRecordFromBuffer( requestBuffer *bytes.Buffer, noResourceRecords uint16 ) ([]models.DNSResourceRecord, error) {
+func ReadDNSResourceRecordFromBuffer( requestBuffer *bytes.Buffer, noResourceRecords uint16, packetBytes []byte ) ([]models.DNSResourceRecord, error) {
 
 	records := make([]models.DNSResourceRecord, noResourceRecords)
 
 	var i uint16
 	for i = 0 ; i< noResourceRecords ;i++ {
-		name, err  := readDomainName(requestBuffer)
+		name, err  := readDomainName(requestBuffer, packetBytes)
 
 		if err != nil {
 			log.Errorf("error reading name from RR %s\n", err)
@@ -379,13 +415,11 @@ func GenerateFlags(  isResponse bool, opCode models.OpCode, isTruncated bool, is
 	return flags
 }
 
-func GenerateDNSHeader( domainName string, isResponse bool, opCode models.OpCode, isTruncated bool, isRecursive bool) models.DNSHeader {
+func GenerateDNSHeader( id uint16, domainName string, isResponse bool, opCode models.OpCode, isTruncated bool, isRecursive bool) models.DNSHeader {
 
 	h := models.DNSHeader{}
 
-	rand.Seed(time.Now().Unix())
-	n := rand.Intn(32767)
-	h.ID = uint16(n)
+	h.ID = id // common id as original.
   h.MiscFlags = GenerateFlags(isResponse, opCode, isTruncated, isRecursive)
   h.QDCount = 1  // assumption we'll only deal with 1 query at a time.
   h.ANCount = 0
@@ -395,10 +429,10 @@ func GenerateDNSHeader( domainName string, isResponse bool, opCode models.OpCode
 	return h
 }
 
-func GenerateARecordRequest( domainName string, recursive bool ) (DNSPacket, error ) {
+func GenerateARecordRequest( id uint16, domainName string, recursive bool ) (DNSPacket, error ) {
 
 	dnsPacket := NewDNSPacket()
-	dnsPacket.header = GenerateDNSHeader( domainName, false, models.OpCodeStandard, false, recursive)
+	dnsPacket.header = GenerateDNSHeader( id, domainName, false, models.OpCodeStandard, false, recursive)
 	dnsPacket.question = GenerateDNSQuestion(domainName, models.ARecord, models.QCIN )
 
 	return dnsPacket, nil
