@@ -239,10 +239,6 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 			b.ProcessDNSResponse(*dnsPacket, conn, request.ClientAddr)
 		} else {
 			b.ProcessDNSQuery(*dnsPacket, conn, request.ClientAddr)
-			if len(dnsPacket.answers) > 0 {
-				log.Infof("answer 0 as string %s\n", string( (*dnsPacket).answers[0].Data))
-			}
-
 		}
 	}
 }
