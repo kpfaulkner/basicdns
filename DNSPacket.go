@@ -22,6 +22,8 @@ type DNSPacket struct {
 	additional []models.DNSResourceRecord
 }
 
+
+
 // NewDNSPacket returns constructed DNS request/reponse packet.
 func NewDNSPacket() DNSPacket {
 	p := DNSPacket{}
@@ -29,9 +31,35 @@ func NewDNSPacket() DNSPacket {
 	return p
 }
 
+
+// ToString.....  print out entire packet... make it easier for debugging
+func (p DNSPacket ) ToString() string {
+
+	// header
+	header := p.header.ToString()
+
+	// question
+  q := p.question.ToString()
+
+  var aa []string
+	// answers
+	for _,a := range  p.answers {
+		aa = append(aa, fmt.Sprintf("%s\n\n\n", a.ToString()))
+	}
+
+	var ad []string
+	// answers
+	for _,a := range  p.additional{
+		ad = append(ad, fmt.Sprintf("%s\n\n\n", a.ToString()))
+	}
+
+
+	return fmt.Sprintf("%s\n%s\nanswers\n%s\nadditional\n%s\n ", header, q, aa,ad)
+}
+
 // ReadDNSPacketFromBuffer takes a Buffer (assumed to be at beginning of buffer) and creates a DNSPacket.
 // All sections of a DNS request should be populated.
-func ReadDNSPacketFromBuffer(requestBuffer *bytes.Buffer ) (*DNSPacket, error) {
+func ReadDNSPacketFromBuffer(requestBuffer bytes.Buffer ) (*DNSPacket, error) {
 
 	// this is so stupidly lazy but cant figure out a nice way so
 	// we can get offset from beginning. Given we're just shuffling 512 bytes around it shouldn't be
@@ -39,31 +67,31 @@ func ReadDNSPacketFromBuffer(requestBuffer *bytes.Buffer ) (*DNSPacket, error) {
 	// instead?
 	originalBytes := requestBuffer.Bytes()
 
-  header,err  := ReadDNSHeaderFromBuffer(requestBuffer)
+  header,err  := ReadDNSHeaderFromBuffer(&requestBuffer)
   if err != nil {
   	log.Errorf("unable to read DNS header %s\n", err)
   	return nil, err
   }
 
-  question, err := ReadDNSQuestionFromBuffer(requestBuffer, header.QDCount)
+  question, err := ReadDNSQuestionFromBuffer(&requestBuffer, header.QDCount)
 	if err != nil {
 		log.Errorf("unable to read DNS question %s\n", err)
 		return nil, err
 	}
 
-	answers, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ANCount, originalBytes)
+	answers, err := ReadDNSResourceRecordFromBuffer(&requestBuffer, header.ANCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS answers %s\n", err)
 		return nil, err
 	}
 
-	authority, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.NSCount, originalBytes)
+	authority, err := ReadDNSResourceRecordFromBuffer(&requestBuffer, header.NSCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS nameserver authority %s\n", err)
 		return nil, err
 	}
 
-	additional, err := ReadDNSResourceRecordFromBuffer(requestBuffer, header.ADCount, originalBytes)
+	additional, err := ReadDNSResourceRecordFromBuffer(&requestBuffer, header.ADCount, originalBytes)
 	if err != nil {
 		log.Errorf("unable to read DNS additional %s\n", err)
 		return nil, err
@@ -437,6 +465,8 @@ func GenerateARecordRequest( id uint16, domainName string, recursive bool ) (DNS
 
 	return dnsPacket, nil
 }
+
+
 
 
 

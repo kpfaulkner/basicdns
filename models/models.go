@@ -1,6 +1,11 @@
 package models
 
-import "net"
+import (
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
+)
 
 type QType uint16
 type QClass uint16
@@ -78,6 +83,74 @@ type DNSResourceRecord struct {
 	TTL                uint32
 	DataLength         uint16
 	Data               []byte
+}
+
+
+
+func (h DNSHeader) ToString() string {
+
+	var s []string
+	s = append(s, fmt.Sprintf("ID %d", h.ID))
+
+
+	s = append(s, fmt.Sprintf("flags binary %s", strconv.FormatInt(int64(h.MiscFlags), 2)))
+	s = append(s, fmt.Sprintf("flags dec %d", h.MiscFlags))
+
+
+	if h.MiscFlags & QRResponseFlag != 0 {
+		s = append(s, "response")
+	} else {
+		s = append(s, "query")
+	}
+
+	if h.MiscFlags & AA != 0 {
+		s = append(s, "AA")
+	}
+
+	if h.MiscFlags & TC != 0 {
+		s = append(s, "TC")
+	}
+
+	if h.MiscFlags & RD != 0 {
+		s = append(s, "RD")
+	}
+
+	if h.MiscFlags & RA != 0 {
+		s = append(s, "RA")
+	}
+
+	s = append(s, fmt.Sprintf("QC %d", h.QDCount))
+	s = append(s, fmt.Sprintf("AN %d", h.ANCount))
+	s = append(s, fmt.Sprintf("NS %d", h.NSCount))
+	s = append(s, fmt.Sprintf("AD %d", h.ADCount))
+
+	return strings.Join(s, "\n")
+}
+
+
+func (q DNSQuestion) ToString() string {
+	var s []string
+	s = append(s, fmt.Sprintf("Domain %s", q.Domain))
+	s = append(s, fmt.Sprintf("QT %d", q.QT))
+	s = append(s, fmt.Sprintf("QC %d", q.QC))
+
+	return strings.Join(s, "\n")
+
+}
+
+func (r DNSResourceRecord) ToString() string {
+
+	var s []string
+	s = append(s, fmt.Sprintf("RESOURCE RECORD"))
+	s = append(s, fmt.Sprintf("Domain %s", r.DomainName))
+	s = append(s, fmt.Sprintf("QT %d", r.QType))
+	s = append(s, fmt.Sprintf("QC %d", r.QClass))
+	s = append(s, fmt.Sprintf("TTL %d", r.TTL))
+	s = append(s, fmt.Sprintf("Data Length %d", r.DataLength))
+	s = append(s, fmt.Sprintf("Data %v", r.Data))
+
+	return strings.Join(s, "\n")
+
 }
 
 

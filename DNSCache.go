@@ -9,8 +9,8 @@ package main
 import (
 	"basicdns/models"
 	"errors"
-	log "github.com/golang/glog"
 	"time"
+	log "github.com/golang/glog"
 )
 
 type CacheEntry struct {
@@ -23,7 +23,7 @@ type CacheEntry struct {
 type DNSCacheReaderWriter interface {
   Set( qType models.QType, domainName string, record DNSPacket ) error
 
-  Get( qType models.QType, domainName string) (*CacheEntry, bool, error)
+  Get( qType models.QType, domainName string) (CacheEntry, bool, error)
 }
 
 // DNSCache is the internal cache used to store the various DNS records.
@@ -65,6 +65,7 @@ func (d *DNSCache) getRecordMap( qType models.QType ) (map[string]CacheEntry, er
 
 // NOT THREAD SAFE YET
 func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket ) error {
+
   m, err := d.getRecordMap( qType)
   if err != nil {
   	log.Errorf("Cache set unable to get appropriate cache map %s\n", err)
@@ -74,7 +75,6 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
   expireTime := time.Now().UTC().Add( time.Duration(record.answers[0].TTL) * time.Second)
   cacheEntry := CacheEntry{ DNSRec: record, ExpiryTimeStamp: expireTime}
 	m[domainName ] = cacheEntry
-
 	return nil
 }
 
@@ -84,6 +84,7 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
 // Will use a bool to indicate if the cache entry existed or not.
 // NOT THREAD SAFE YET
 func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, bool, error) {
+
 	m, err := d.getRecordMap( qType)
 	if err != nil {
 		log.Errorf("Cache get unable to get appropriate cache map %s\n", err)
@@ -97,9 +98,10 @@ func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, boo
 	}
 
 	// check if expired. If expired, clear cache and return as if it never existed.....
-	if entry.ExpiryTimeStamp.After(time.Now().UTC()) {
+	if entry.ExpiryTimeStamp.Before(time.Now().UTC()) {
     // clear out cache for this entry.
 		delete(m, domainName)
+
 		return nil, false, nil
 	}
 

@@ -50,7 +50,7 @@ type BasicDNS struct {
   numResolverGoRoutines int
 
   // cache... simplistic one for now.
-  cache DNSCacheReaderWriter
+  cache DNSCache
 
   upstreamDNS UpstreamDNS
 
@@ -59,6 +59,8 @@ type BasicDNS struct {
   // original client requesting this.
   upstreamLUT map[uint16]net.UDPAddr
 }
+
+var globalCache DNSCache
 
 // NewBasicDNS Create new instance, initialise pool of goroutines etc.
 func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
@@ -69,7 +71,10 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	requests := make(chan models.RawDNSRequest, 1000)
 	b.requestChannel = requests
 	cache,_ := NewDNSCache()
-	b.cache = &cache
+	b.cache = cache
+
+	// hack but trying anything
+	globalCache,_ = NewDNSCache()
 
 	// TODO(kpfaulkner) remove magic cloudflare.
 	///ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
@@ -156,69 +161,16 @@ func sendNotImplemented(conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 }
 
-// sendDNSPacketesponse sends the DNSPacket to the clientAddr.
-func sendDNSPacketResponse( record DNSPacket,conn *net.UDPConn, clientAddr *net.UDPAddr ) error {
-
-
-	return nil
-}
-
-func (b *BasicDNS) processARecordRequest(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
-
-	var newDNSPacket DNSPacket
-
-	// check cache
-	record, recordExists, err := b.cache.Get( models.ARecord, dnsPacket.question.Domain)
-	if err != nil {
-    // cannot work... return not implemented for moment!
-    sendNotImplemented( conn, clientAddr)
-    return
-	}
-
-
-	if !recordExists{
-
-		// if allowed to check upstream, do it.
-		if dnsPacket.header.MiscFlags & models.RD != 0 {
-			// query upstream DNS server, record into cache.
-			// perform ARecord lookup.
-			// store in cache
-			// return to sender....    address unknown.
-			//record, err := b.upstreamDNS.GetARecord( dnsPacket)
-			err := b.upstreamDNS.GetARecordWithID(dnsPacket.header.ID,dnsPacket.question.Domain)
-
-			if err != nil {
-				// unable to get ARecord..... kaboom?
-				// TODO(kpfaulkner)
-			}
-
-		} else {
-			// no recursion wanted.
-			// return with no answer.
-
-    }
-	} else {
-		newDNSPacket = record.DNSRec
-	}
-
-	sendDNSPacketResponse( newDNSPacket, conn, clientAddr)
-}
-
-func (b *BasicDNS) processCNameRequest(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
-
-}
-
 // ProcessDNSResponse means an upstream request has been sent and we're now getting the response.
 func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 	// store in cache of awesomeness
-	b.cache.Set( dnsPacket.answers[0].QType, dnsPacket.answers[0].DomainName, dnsPacket )
+	b.cache.Set( dnsPacket.question.QT, dnsPacket.answers[0].DomainName, dnsPacket )
 
 	// check who wanted it in the first place and send it to them.
 	originalClientAddr := b.upstreamLUT[ dnsPacket.header.ID]
 	SendDNSRecord( dnsPacket, conn, &originalClientAddr)
 	delete(b.upstreamLUT, dnsPacket.header.ID )
-
 }
 
 // sendUpstreamRequest to cloudflare/google/whereever we configure.
@@ -235,7 +187,8 @@ func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, 
 func (b *BasicDNS) ProcessDNSQuery(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 	// check if we have answer already cached.
-	record, recordExists, err := b.cache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
+	//record, recordExists, err := b.cache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
+	record, recordExists, err := globalCache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
   if err != nil {
   	log.Errorf("Unable to process DNS Query %s\n", err)
   	// TODO(kpfaulkner) return something to the user... unsure what though.
@@ -244,8 +197,9 @@ func (b *BasicDNS) ProcessDNSQuery(dnsPacket DNSPacket, conn *net.UDPConn, clien
 
 	if recordExists {
 		// return packet to the user.
-		log.Infof("have record %v\n", record)
-		SendDNSRecord( record.DNSRec, conn, clientAddr)
+		// reset record ID to be original clients ID
+		record.DNSRec.header.ID = dnsPacket.header.ID
+		SendDNSRecord(record.DNSRec, conn, clientAddr)
 	} else {
 
 		// store client ID so we can respond to it later once we have the DNS record!
@@ -273,7 +227,7 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 		}
 
 		var requestBuffer = bytes.NewBuffer(request.RawBytes)
-		dnsPacket,err  := ReadDNSPacketFromBuffer( requestBuffer)
+		dnsPacket,err  := ReadDNSPacketFromBuffer( *requestBuffer)
 		if err != nil {
 			log.Errorf("unable to process request... BOOOOOM  %s\n", err)
 			sendNotImplemented( conn, request.ClientAddr)
@@ -281,17 +235,20 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 		}
 
 		isResponse := (dnsPacket.header.MiscFlags & models.QRResponseFlag != 0)
-
 		if isResponse {
 			b.ProcessDNSResponse(*dnsPacket, conn, request.ClientAddr)
 		} else {
 			b.ProcessDNSQuery(*dnsPacket, conn, request.ClientAddr)
+			if len(dnsPacket.answers) > 0 {
+				log.Infof("answer 0 as string %s\n", string( (*dnsPacket).answers[0].Data))
+			}
+
 		}
 	}
 }
 
 // createHandlerPool will create a pool of go routines that handle the incoming requests.
-func (b BasicDNS) createHandlerPool( conn *net.UDPConn ) {
+func (b *BasicDNS) createHandlerPool( conn *net.UDPConn ) {
 	for i:=0;i< b.numResolverGoRoutines ;i++ {
     go b.processDNSRequest( conn, b.requestChannel )
 	}
@@ -299,7 +256,7 @@ func (b BasicDNS) createHandlerPool( conn *net.UDPConn ) {
 
 // RunServer is the main loop for the DNS server.
 // accept connections and passes off to go routines for processing.
-func (b BasicDNS) RunServer() {
+func (b *BasicDNS) RunServer() {
 
 	conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 53})
 	if err != nil {
@@ -314,14 +271,13 @@ func (b BasicDNS) RunServer() {
 	b.wg.Add( b.numResolverGoRoutines)
 	b.createHandlerPool(conn)
 
-	// request coming in. Allocated bytes up front.
-	// reading request from main thread.... will this be a bottleneck?
-	requestBuffer := make([]byte, MaxPacketSizeInBytes)
-
 	for {
+		// request coming in. Allocated bytes up front.
+		// reading request from main thread.... will this be a bottleneck?
+		requestBuffer := make([]byte, MaxPacketSizeInBytes)
+
 		_, clientAddr, err := conn.ReadFromUDP(requestBuffer)
 
-		log.Infof("got request on UDP!!\n")
 		if err != nil {
 			log.Errorf("Unable to read request bytes %s\n", err)
 			// failed, so need to figure out what to return? For now....  afraid we'll just drop it.
