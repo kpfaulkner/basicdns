@@ -39,6 +39,9 @@ import (
 const (
 	MaxPacketSizeInBytes int=512
 	DNSPort int = 10053
+
+	cloudFlareIP string = "1.1.1.1"
+	cloudFlarePort int = 53
 )
 
 // BasicDNS is the core of the simple DNS server.
@@ -77,8 +80,7 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	globalCache,_ = NewDNSCache()
 
 	// TODO(kpfaulkner) remove magic cloudflare.
-	///ud,_ :=  NewUpstreamDNS("1.1.1.1", 53)
-	ud,_ :=  NewUpstreamDNS("127.0.0.1", 1053)
+	ud,_ :=  NewUpstreamDNS(cloudFlareIP, cloudFlarePort)
 	b.upstreamDNS = *ud
 
 	// LUT for when we need to look upstream.

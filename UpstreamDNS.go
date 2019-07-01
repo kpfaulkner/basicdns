@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/labstack/gommon/log"
 	"net"
 )
@@ -17,8 +16,13 @@ func NewUpstreamDNS( nameServer string, port int) (*UpstreamDNS, error) {
   u := UpstreamDNS{}
   u.upstreamDNSFQDN = nameServer
   u.port = port
-	u.udpAddr,_ = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", nameServer, port))
 
+	ip, _, err := net.ParseCIDR(nameServer+"/32")
+	if err != nil {
+		log.Fatalf("unable to get upstream addr %s\n", err)
+	}
+
+	u.udpAddr = &net.UDPAddr{IP: ip, Port: port}
 	return &u, nil
 }
 
@@ -59,9 +63,7 @@ func (u UpstreamDNS) GetARecordWithID(id uint16, domainName string) error {
 		return err
 	}
 
-	resolver := net.UDPAddr{IP: net.IP{1, 1, 1, 1}, Port: 53}
-
-	SendDNSRecord(dnsPacket, u.Conn, &resolver)
+	SendDNSRecord(dnsPacket, u.Conn, u.udpAddr)
 
 	return nil
 }
