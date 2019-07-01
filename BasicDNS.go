@@ -63,8 +63,6 @@ type BasicDNS struct {
   upstreamLUT map[uint16]net.UDPAddr
 }
 
-var globalCache DNSCache
-
 // NewBasicDNS Create new instance, initialise pool of goroutines etc.
 func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	b := BasicDNS{}
@@ -76,10 +74,6 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	cache,_ := NewDNSCache()
 	b.cache = cache
 
-	// hack but trying anything
-	globalCache,_ = NewDNSCache()
-
-	// TODO(kpfaulkner) remove magic cloudflare.
 	ud,_ :=  NewUpstreamDNS(cloudFlareIP, cloudFlarePort)
 	b.upstreamDNS = *ud
 
@@ -189,8 +183,7 @@ func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, 
 func (b *BasicDNS) ProcessDNSQuery(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 	// check if we have answer already cached.
-	//record, recordExists, err := b.cache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
-	record, recordExists, err := globalCache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
+	record, recordExists, err := b.cache.Get( dnsPacket.question.QT, dnsPacket.question.Domain)
   if err != nil {
   	log.Errorf("Unable to process DNS Query %s\n", err)
   	// TODO(kpfaulkner) return something to the user... unsure what though.
