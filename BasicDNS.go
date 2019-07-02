@@ -68,7 +68,7 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	b := BasicDNS{}
   b.numResolverGoRoutines = poolSize
 
-	// channel size of 1000.....  need to figure out what is the best size here.
+		// channel size of 1000.....  need to figure out what is the best size here.
 	requests := make(chan models.RawDNSRequest, 1000)
 	b.requestChannel = requests
 	cache,_ := NewDNSCache()
@@ -122,40 +122,23 @@ func readQueryDetails(requestBuffer *bytes.Buffer) (*models.DNSQuestion, error) 
 	return &req, nil
 }
 
-// readRequest converts the bytearray to the DNSRequest format.
-func readRequest( requestBuffer *bytes.Buffer) (*models.DNSRequest, error) {
-
-	var header models.DNSHeader
-	err := binary.Read(requestBuffer, binary.BigEndian, &header)
-	if err != nil {
-		log.Errorf("Cannot decode header %s\n", err)
-		log.Errorf("Will not process this request\n") // what should we return to the caller?  Any appropriate error code?
-
-		return nil, err
-	}
-
-	request := models.DNSRequest{}
-
-	log.Infof("number of queries %d\n", header.QDCount)
-
-	// loop through and read all record requests.
-	for i:=uint16(0); i< header.QDCount; i++ {
-		req,err  := readQueryDetails(requestBuffer)
-		if err != nil {
-			log.Errorf("error while reading domain %s\n", err)
-		}
-
-		log.Infof("have query for %s\n", req.Domain)
-		request.QuerySlice = append( request.QuerySlice, *req)
-	}
-
-	return &request, nil
-}
-
 // sendNotImplemented will send RCODE 4 (not implemented)
-func sendNotImplemented(conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+func sendNotImplemented(id uint16, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
+	dnsPacket := NewDNSPacket()
+	dnsPacket.header = models.DNSHeader{ID: id}
+	dnsPacket.header.MiscFlags = models.QRResponseFlag | models.RCodeNotImplemented
+	SendDNSRecord( dnsPacket, conn, clientAddr)
 }
+
+// sendErrorResponse will send RCODE 3 (generic error)
+func sendErrorResponse(id uint16, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
+	dnsPacket := NewDNSPacket()
+	dnsPacket.header = models.DNSHeader{ID: id}
+	dnsPacket.header.MiscFlags = models.QRResponseFlag | models.RCodeNameError
+	SendDNSRecord( dnsPacket, conn, clientAddr)
+}
+
 
 // ProcessDNSResponse means an upstream request has been sent and we're now getting the response.
 func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
@@ -174,8 +157,7 @@ func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, 
 	err := b.upstreamDNS.GetARecordWithID(dnsPacket.header.ID, dnsPacket.question.Domain)
 
 	if err != nil {
-		// unable to get ARecord..... kaboom?
-		// TODO(kpfaulkner)
+		sendErrorResponse( dnsPacket.header.ID, conn, clientAddr)
 	}
 }
 
@@ -225,7 +207,7 @@ func (b *BasicDNS) processDNSRequest(conn *net.UDPConn, requestChannel chan mode
 		dnsPacket,err  := ReadDNSPacketFromBuffer( *requestBuffer)
 		if err != nil {
 			log.Errorf("unable to process request... BOOOOOM  %s\n", err)
-			sendNotImplemented( conn, request.ClientAddr)
+			//sendNotImplemented( conn, request.ClientAddr)
 			continue
 		}
 

@@ -41,6 +41,12 @@ const (
 
 	QRResponseFlag uint16 = 1 << 15
 
+	RCodeNoError        uint16 = 0
+	RCodeFormaterror    uint16 = 1
+	RCodeServerFailure  uint16 = 2
+	RCodeNameError      uint16 = 3
+	RCodeNotImplemented uint16 = 4
+	RCodeRefused        uint16 = 5
 )
 
 
