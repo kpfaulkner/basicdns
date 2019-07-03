@@ -9,6 +9,7 @@ package main
 import (
 	"basicdns/models"
 	"errors"
+	"sync"
 	"time"
 	log "github.com/golang/glog"
 )
@@ -16,6 +17,7 @@ import (
 type CacheEntry struct {
 	DNSRec DNSPacket
 	ExpiryTimeStamp time.Time   // used to validate/expire TTL.
+
 }
 
 
@@ -39,6 +41,10 @@ type DNSCache struct {
 
 	// CNAMEs
 	CNameRecordMap map[string]CacheEntry
+
+	// lock for get/set. Allow multi reader at once.
+	lock sync.RWMutex
+
 }
 
 func NewDNSCache() (DNSCache, error ) {
@@ -74,7 +80,10 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
 
   expireTime := time.Now().UTC().Add( time.Duration(record.answers[0].TTL) * time.Second)
   cacheEntry := CacheEntry{ DNSRec: record, ExpiryTimeStamp: expireTime}
-	m[domainName ] = cacheEntry
+	d.lock.Lock()
+	m[domainName] = cacheEntry
+	d.lock.Unlock()
+
 	return nil
 }
 
@@ -91,6 +100,9 @@ func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, boo
 		return nil, false, err
 	}
 
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
 	entry, ok := m[domainName]
 	if !ok  {
 		// map entry doesn't exist.
@@ -101,10 +113,8 @@ func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, boo
 	if entry.ExpiryTimeStamp.Before(time.Now().UTC()) {
     // clear out cache for this entry.
 		delete(m, domainName)
-
 		return nil, false, nil
 	}
 
 	return &entry, true, nil
-
 }

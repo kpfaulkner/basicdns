@@ -6,12 +6,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/labstack/gommon/log"
-
 	"strconv"
 	"strings"
-
 )
-
 
 // DNSPacket is the entire DNS Packet used for requests and responses.
 type DNSPacket struct {
@@ -22,15 +19,11 @@ type DNSPacket struct {
 	additional []models.DNSResourceRecord
 }
 
-
-
 // NewDNSPacket returns constructed DNS request/reponse packet.
 func NewDNSPacket() DNSPacket {
 	p := DNSPacket{}
-
 	return p
 }
-
 
 // ToString.....  print out entire packet... make it easier for debugging
 func (p DNSPacket ) ToString() string {
@@ -43,16 +36,15 @@ func (p DNSPacket ) ToString() string {
 
   var aa []string
 	// answers
-	for _,a := range  p.answers {
+	for _,a := range p.answers {
 		aa = append(aa, fmt.Sprintf("%s\n\n\n", a.ToString()))
 	}
 
 	var ad []string
 	// answers
-	for _,a := range  p.additional{
+	for _,a := range p.additional{
 		ad = append(ad, fmt.Sprintf("%s\n\n\n", a.ToString()))
 	}
-
 
 	return fmt.Sprintf("%s\n%s\nanswers\n%s\nadditional\n%s\n ", header, q, aa,ad)
 }
@@ -277,10 +269,6 @@ func writeDNSHeader( dnsPacket DNSPacket, responseBuffer *bytes.Buffer) error {
 
 	header := dnsPacket.header
 
-	// assuming QDCount are correct
-	// need to figure out what these do.
-
-	//header.MiscFlags = models.QRResponseFlag   // QR == 1, indicating response.
 	header.ANCount = uint16( len( dnsPacket.answers))
 	header.NSCount = uint16( len( dnsPacket.authority))
 	header.ADCount = uint16( len( dnsPacket.additional))

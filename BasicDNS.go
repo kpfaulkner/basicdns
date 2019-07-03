@@ -27,10 +27,8 @@ limitations under the License.
 import (
 	"basicdns/models"
 	"bytes"
-	"encoding/binary"
 	log "github.com/golang/glog"
 	"net"
-	"strings"
 	"sync"
 )
 
@@ -80,46 +78,6 @@ func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
 	// LUT for when we need to look upstream.
 	b.upstreamLUT = make(map[uint16]net.UDPAddr, 10)
 	return &b, nil
-}
-
-// readQueryDetails reads the domain names from the question section.
-// also returns QType and QClass
-func readQueryDetails(requestBuffer *bytes.Buffer) (*models.DNSQuestion, error) {
-
-	var domainSegments []string
-
-	completed := false
-	for completed == false {
-
-		// read first byte. This will be how long the query domain will be.
-		domainLength, err := requestBuffer.ReadByte()
-
-		if domainLength == 0 {
-			// finito.
-			completed = true
-			continue
-		}
-
-		byteSlice := make([]byte, domainLength)
-
-		_, err = requestBuffer.Read(byteSlice)
-		if err != nil {
-			log.Errorf("Unable to read part of request domain %s\n", err)
-			return nil, err
-		}
-		domainSegments = append(domainSegments, string(byteSlice))
-	}
-
-	// reads QType and QClass
-	qType := models.QType(binary.BigEndian.Uint16(requestBuffer.Next(2)))
-	qClass := models.QClass(binary.BigEndian.Uint16(requestBuffer.Next(2)))
-
-	req := models.DNSQuestion{}
-	req.Domain = strings.Join(domainSegments, ".")
-	req.QT = qType
-	req.QC = qClass
-
-	return &req, nil
 }
 
 // sendNotImplemented will send RCODE 4 (not implemented)
