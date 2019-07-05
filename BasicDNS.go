@@ -25,7 +25,7 @@ limitations under the License.
 */
 
 import (
-	"basicdns/models"
+	"github.com/kpfaulkner/basicdns/models"
 	"bytes"
 	log "github.com/golang/glog"
 	"net"
@@ -47,7 +47,6 @@ const (
 type BasicDNS struct {
   wg sync.WaitGroup
   requestChannel chan models.RawDNSRequest // requests to go routines will come through the channel.
-
   numResolverGoRoutines int
 
   // cache... simplistic one for now.

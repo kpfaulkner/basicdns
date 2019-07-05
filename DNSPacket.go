@@ -1,7 +1,7 @@
 package main
 
 import (
-	"basicdns/models"
+	"github.com/kpfaulkner/basicdns/models"
 	"bytes"
 	"encoding/binary"
 	"fmt"

@@ -7,7 +7,7 @@ package main
  */
 
 import (
-	"basicdns/models"
+	"github.com/kpfaulkner/basicdns/models"
 	"errors"
 	"sync"
 	"time"
