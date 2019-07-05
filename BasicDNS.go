@@ -25,9 +25,9 @@ limitations under the License.
 */
 
 import (
-	"github.com/kpfaulkner/basicdns/models"
 	"bytes"
 	log "github.com/golang/glog"
+	"github.com/kpfaulkner/basicdns/models"
 	"net"
 	"sync"
 )
@@ -100,6 +100,8 @@ func sendErrorResponse(id uint16, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 // ProcessDNSResponse means an upstream request has been sent and we're now getting the response.
 func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
+	log.Infof("Received from upstream %s\n", dnsPacket.question.Domain)
+
 	// store in cache of awesomeness
 	b.cache.Set( dnsPacket.question.QT, dnsPacket.answers[0].DomainName, dnsPacket )
 
@@ -130,12 +132,14 @@ func (b *BasicDNS) ProcessDNSQuery(dnsPacket DNSPacket, conn *net.UDPConn, clien
   }
 
 	if recordExists {
+		log.Infof("Already have %s in cache\n", dnsPacket.question.Domain)
 		// return packet to the user.
 		// reset record ID to be original clients ID
 		record.DNSRec.header.ID = dnsPacket.header.ID
 		SendDNSRecord(record.DNSRec, conn, clientAddr)
 	} else {
 
+		log.Infof("Do not have %s in cache\n", dnsPacket.question.Domain)
 		// store client ID so we can respond to it later once we have the DNS record!
 		b.upstreamLUT[ dnsPacket.header.ID] = *clientAddr
 
@@ -201,6 +205,7 @@ func (b *BasicDNS) RunServer() {
 	b.wg.Add( b.numResolverGoRoutines)
 	b.createHandlerPool(conn)
 
+	requestCount := 0
 	for {
 		// request coming in. Allocated bytes up front.
 		// reading request from main thread.... will this be a bottleneck?
@@ -208,11 +213,16 @@ func (b *BasicDNS) RunServer() {
 
 		_, clientAddr, err := conn.ReadFromUDP(requestBuffer)
 
+		log.Infof("Have message from %s\n", clientAddr.IP.String())
+
 		if err != nil {
 			log.Errorf("Unable to read request bytes %s\n", err)
 			// failed, so need to figure out what to return? For now....  afraid we'll just drop it.
 			continue
 		}
+
+		log.Infof("request %d\n", requestCount)
+		requestCount++
 
 		request := models.RawDNSRequest{ requestBuffer, clientAddr}
 		b.requestChannel <- request
