@@ -98,6 +98,8 @@ func sendErrorResponse(id uint16, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 
 // ProcessDNSResponse means an upstream request has been sent and we're now getting the response.
+// NOTE: When processing CNAME from upstream the DNSPacket.Answers is NOT populated but authority is.
+// need to investigate further... unsure if this is expected or a bug.
 func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
 
 	log.Infof("Received from upstream %s\n", dnsPacket.question.Domain)
