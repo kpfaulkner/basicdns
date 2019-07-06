@@ -69,7 +69,26 @@ func (d *DNSCache) getRecordMap( qType models.QType ) (map[string]CacheEntry, er
   return nil, errors.New("Unable to find appropriate cache")
 }
 
-// NOT THREAD SAFE YET
+// getMinTTLFromRecordResources get minimum TTL from all record resources supplied
+func getMinTTLFromRecordResources( rrArray []models.DNSResourceRecord) uint32 {
+
+	minTTL := uint32(0)
+	for _,rr := range rrArray {
+		if minTTL == 0 {
+			minTTL = rr.TTL
+		}
+
+		if rr.TTL < minTTL {
+			minTTL = rr.TTL
+		}
+	}
+
+	return minTTL
+}
+
+// Set.... does setty stuff.
+// TTL needs to come from either the answer section or the authority....
+// need to figure out which one....
 func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket ) error {
 
   m, err := d.getRecordMap( qType)
@@ -78,7 +97,11 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
   	return err
   }
 
-  expireTime := time.Now().UTC().Add( time.Duration(record.answers[0].TTL) * time.Second)
+  allRRs := append( record.answers, record.authority...)
+	allRRs = append(allRRs, record.additional...)
+
+  minTTL := getMinTTLFromRecordResources( allRRs)
+  expireTime := time.Now().UTC().Add( time.Duration(minTTL) * time.Second)
   cacheEntry := CacheEntry{ DNSRec: record, ExpiryTimeStamp: expireTime}
 	d.lock.Lock()
 	m[domainName] = cacheEntry

@@ -105,7 +105,7 @@ func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, cl
 	log.Infof("Received from upstream %s\n", dnsPacket.question.Domain)
 
 	// store in cache of awesomeness
-	b.cache.Set( dnsPacket.question.QT, dnsPacket.answers[0].DomainName, dnsPacket )
+	b.cache.Set( dnsPacket.question.QT, dnsPacket.question.Domain, dnsPacket )
 
 	// check who wanted it in the first place and send it to them.
 	originalClientAddr := b.upstreamLUT[ dnsPacket.header.ID]
