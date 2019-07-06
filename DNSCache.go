@@ -8,18 +8,16 @@ package main
 
 import (
 	"github.com/kpfaulkner/basicdns/models"
-	"errors"
 	"sync"
 	"time"
-	log "github.com/golang/glog"
 )
 
 type CacheEntry struct {
 	DNSRec DNSPacket
 	ExpiryTimeStamp time.Time   // used to validate/expire TTL.
-
 }
 
+type QTypeCache map[string]CacheEntry
 
 // DNSCacheReaderWriter is the interface for any caches that will store DNSRecords
 type DNSCacheReaderWriter interface {
@@ -36,11 +34,8 @@ type DNSCache struct {
 
 	// keep different record caches in different maps....  until I figure out a better way.
 
-	// A Records.
-	ARecordMap map[string]CacheEntry
-
-	// CNAMEs
-	CNameRecordMap map[string]CacheEntry
+	// First lookup is based on QType... then its domain -> CacheEntry
+	cache map[models.QType]QTypeCache
 
 	// lock for get/set. Allow multi reader at once.
 	lock sync.RWMutex
@@ -50,23 +45,9 @@ type DNSCache struct {
 func NewDNSCache() (DNSCache, error ) {
 
 	c := DNSCache{}
-	c.ARecordMap = make(map[string]CacheEntry)
-	c.CNameRecordMap = make(map[string]CacheEntry)
+	c.cache = make(map[models.QType]QTypeCache)
 
   return c, nil
-}
-
-func (d *DNSCache) getRecordMap( qType models.QType ) (map[string]CacheEntry, error) {
-
-	if qType == models.ARecord {
-		return d.ARecordMap, nil
-	}
-
-  if qType == models.CName {
-  	return d.CNameRecordMap, nil
-  }
-
-  return nil, errors.New("Unable to find appropriate cache")
 }
 
 // getMinTTLFromRecordResources get minimum TTL from all record resources supplied
@@ -91,11 +72,6 @@ func getMinTTLFromRecordResources( rrArray []models.DNSResourceRecord) uint32 {
 // need to figure out which one....
 func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket ) error {
 
-  m, err := d.getRecordMap( qType)
-  if err != nil {
-  	log.Errorf("Cache set unable to get appropriate cache map %s\n", err)
-  	return err
-  }
 
   allRRs := append( record.answers, record.authority...)
 	allRRs = append(allRRs, record.additional...)
@@ -103,8 +79,21 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
   minTTL := getMinTTLFromRecordResources( allRRs)
   expireTime := time.Now().UTC().Add( time.Duration(minTTL) * time.Second)
   cacheEntry := CacheEntry{ DNSRec: record, ExpiryTimeStamp: expireTime}
+
+  // WWWWWAAAAAAAAYYYYYYYYYY too much happening inside the lock.
+  // until its a problem will leave it
 	d.lock.Lock()
-	m[domainName] = cacheEntry
+
+	// ugly... need something more atomic.
+	// cache to write against.
+  var qCache QTypeCache
+  var ok bool
+
+	if qCache, ok = d.cache[qType]; !ok {
+		d.cache[qType] = QTypeCache{}
+		qCache = d.cache[qType]
+	}
+	qCache[domainName] = cacheEntry
 	d.lock.Unlock()
 
 	return nil
@@ -117,16 +106,13 @@ func (d *DNSCache) Set( qType models.QType, domainName string, record DNSPacket 
 // NOT THREAD SAFE YET
 func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, bool, error) {
 
-	m, err := d.getRecordMap( qType)
-	if err != nil {
-		log.Errorf("Cache get unable to get appropriate cache map %s\n", err)
-		return nil, false, err
-	}
+	// cache to write against.
+	cache := d.cache[ qType]
 
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 
-	entry, ok := m[domainName]
+	entry, ok := cache[domainName]
 	if !ok  {
 		// map entry doesn't exist.
 		return nil, false, nil
@@ -135,7 +121,7 @@ func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, boo
 	// check if expired. If expired, clear cache and return as if it never existed.....
 	if entry.ExpiryTimeStamp.Before(time.Now().UTC()) {
     // clear out cache for this entry.
-		delete(m, domainName)
+		delete(cache, domainName)
 		return nil, false, nil
 	}
 
