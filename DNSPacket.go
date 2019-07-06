@@ -445,15 +445,13 @@ func GenerateDNSHeader( id uint16, domainName string, isResponse bool, opCode mo
 	return h
 }
 
-func GenerateARecordRequest( id uint16, domainName string, recursive bool ) (DNSPacket, error ) {
+func GenerateRecordRequest( id uint16, domainName string, recursive bool, recordType models.QType ) (DNSPacket, error ) {
 
 	dnsPacket := NewDNSPacket()
 	dnsPacket.header = GenerateDNSHeader( id, domainName, false, models.OpCodeStandard, false, recursive)
-	dnsPacket.question = GenerateDNSQuestion(domainName, models.ARecord, models.QCIN )
-
+	dnsPacket.question = GenerateDNSQuestion(domainName, recordType, models.QCIN )
 	return dnsPacket, nil
 }
-
 
 
 

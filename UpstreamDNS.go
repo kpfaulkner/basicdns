@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/kpfaulkner/basicdns/models"
 	"github.com/labstack/gommon/log"
 	"net"
 )
@@ -27,37 +28,11 @@ func NewUpstreamDNS( nameServer string, port int) (*UpstreamDNS, error) {
 }
 
 
-// connectUpStream will connect to the upstream DNS provider we've specified.
-// Returning Conn interface as opposed to UDPConn. Should be ok. :)
-func connectUpStream( upstreamDNS string, udpAddr *net.UDPAddr ) (*net.UDPConn, error){
-	//Connect udp
-
-	/*
-	conn, err := net.DialUDP("udp", nil, udpAddr )
-	if err != nil {
-		return nil, err
-	}*/
-
-	var ip = make(net.IP,4)
-	// 203.40.11.170
-	ip[0] = 203
-	ip[1] = 40
-	ip[2] = 11
-	ip[3] = 170
-
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{ Port: 10000})
-	if err != nil {
-		log.Fatal("Listen:", err)
-	}
-
-  return conn, nil
-}
-
-// GetARecord requests ARecord from upstream DNS server.
+// GetRecordWithID requests a record from upstream DNS server.
 // no data returned here...
-func (u UpstreamDNS) GetARecordWithID(id uint16, domainName string) error {
+func (u UpstreamDNS) GetRecordWithID(id uint16, domainName string, qType models.QType) error {
 
-	dnsPacket, err := GenerateARecordRequest( id, domainName, true)
+	dnsPacket, err := GenerateRecordRequest( id, domainName, true,qType)
 	if err != nil {
 		log.Errorf("unable to get ARecord from upstream provider %s\n", err)
 		return err
@@ -67,7 +42,6 @@ func (u UpstreamDNS) GetARecordWithID(id uint16, domainName string) error {
 
 	return nil
 }
-
 
 
 

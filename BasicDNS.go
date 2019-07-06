@@ -113,7 +113,9 @@ func (b *BasicDNS) ProcessDNSResponse(dnsPacket DNSPacket, conn *net.UDPConn, cl
 
 // sendUpstreamRequest to cloudflare/google/whereever we configure.
 func (b *BasicDNS) sendUpstreamRequest( dnsPacket DNSPacket, conn *net.UDPConn, clientAddr *net.UDPAddr ) {
-	err := b.upstreamDNS.GetARecordWithID(dnsPacket.header.ID, dnsPacket.question.Domain)
+
+
+	err := b.upstreamDNS.GetRecordWithID(dnsPacket.header.ID, dnsPacket.question.Domain, dnsPacket.question.QT)
 
 	if err != nil {
 		sendErrorResponse( dnsPacket.header.ID, conn, clientAddr)
