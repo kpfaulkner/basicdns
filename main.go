@@ -32,11 +32,13 @@ import (
 
 func main() {
 
-	dns, err := NewBasicDNS(10)
+	dns, err := NewBasicDNS(1000, nil)
 
 	if err != nil {
 		log.Errorf("error %s\n", err)
 	}
 
-	dns.RunServer()
+	go dns.RunServer()
+
+	RunAdminWebServer(dns)
 }

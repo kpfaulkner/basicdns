@@ -21,9 +21,17 @@ type QTypeCache map[string]CacheEntry
 
 // DNSCacheReaderWriter is the interface for any caches that will store DNSRecords
 type DNSCacheReaderWriter interface {
-  Set( qType models.QType, domainName string, record DNSPacket ) error
+	Set( qType models.QType, domainName string, record DNSPacket ) error
+	Get( qType models.QType, domainName string) (*CacheEntry, bool, error)
+	Clear() error
+	Stats() CacheStats
+}
 
-  Get( qType models.QType, domainName string) (CacheEntry, bool, error)
+
+type CacheStats struct {
+  NoARecords int
+  NoCNames int
+
 }
 
 // DNSCache is the internal cache used to store the various DNS records.
@@ -127,3 +135,29 @@ func (d *DNSCache) Get( qType models.QType, domainName string) (*CacheEntry, boo
 
 	return &entry, true, nil
 }
+
+func (d *DNSCache) Clear() error {
+
+	d.lock.Lock()
+
+	//d.cache = make(map[models.QType]QTypeCache)
+	for k := range d.cache {
+		delete(d.cache, k)
+	}
+
+	d.lock.Unlock()
+	return nil
+}
+
+func (d *DNSCache) Stats() CacheStats {
+
+	stats := CacheStats{}
+	stats.NoARecords = len(d.cache[ models.ARecord])
+	stats.NoCNames = len(d.cache[ models.CName])
+
+	return stats
+}
+
+
+
+

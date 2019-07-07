@@ -50,7 +50,7 @@ type BasicDNS struct {
   numResolverGoRoutines int
 
   // cache... simplistic one for now.
-  cache DNSCache
+  cache DNSCacheReaderWriter
 
   upstreamDNS UpstreamDNS
 
@@ -61,15 +61,22 @@ type BasicDNS struct {
 }
 
 // NewBasicDNS Create new instance, initialise pool of goroutines etc.
-func NewBasicDNS(poolSize int ) (*BasicDNS, error) {
+// Can pass in own cache if desired.
+func NewBasicDNS(poolSize int, cache *DNSCacheReaderWriter ) (*BasicDNS, error) {
 	b := BasicDNS{}
   b.numResolverGoRoutines = poolSize
 
 		// channel size of 1000.....  need to figure out what is the best size here.
 	requests := make(chan models.RawDNSRequest, 1000)
 	b.requestChannel = requests
-	cache,_ := NewDNSCache()
-	b.cache = cache
+
+	// if no cache passed in, just create own.
+	if cache == nil {
+		c, _ := NewDNSCache()
+		b.cache = &c
+	} else {
+		b.cache = *cache
+	}
 
 	ud,_ :=  NewUpstreamDNS(cloudFlareIP, cloudFlarePort)
 	b.upstreamDNS = *ud
@@ -190,6 +197,15 @@ func (b *BasicDNS) createHandlerPool( conn *net.UDPConn ) {
 	for i:=0;i< b.numResolverGoRoutines ;i++ {
     go b.processDNSRequest( conn, b.requestChannel )
 	}
+}
+
+func (b *BasicDNS) ClearCache() {
+  b.cache.Clear()
+}
+
+
+func (b *BasicDNS) CacheStats() CacheStats {
+	return b.cache.Stats()
 }
 
 // RunServer is the main loop for the DNS server.
